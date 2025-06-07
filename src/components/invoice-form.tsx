@@ -40,6 +40,23 @@ type InvoiceFormData = z.infer<typeof invoiceSchema>;
 export function InvoiceForm() {
   const [isClient, setIsClient] = useState(false);
 
+  // Load saved data from localStorage
+  const loadSavedData = () => {
+    if (typeof window !== 'undefined') {
+      const savedData = localStorage.getItem('invoiceFormData');
+      if (savedData) {
+        try {
+          return JSON.parse(savedData);
+        } catch (error) {
+          console.error('Error parsing saved form data:', error);
+        }
+      }
+    }
+    return null;
+  };
+
+  const savedData = loadSavedData();
+
   const {
     register,
     control,
@@ -49,7 +66,7 @@ export function InvoiceForm() {
     formState: { errors },
   } = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
-    defaultValues: {
+    defaultValues: savedData || {
       invoiceNumber: '',
       invoiceDate: '',
       items: [{ description: '', quantity: 1, price: 0 }],
@@ -85,9 +102,29 @@ export function InvoiceForm() {
   useEffect(() => {
     setIsClient(true);
     const currentDate = new Date().toISOString().split('T')[0];
-    setValue('invoiceDate', currentDate);
-    setValue('invoiceNumber', generateInvoiceNumber(currentDate));
-  }, [setValue]);
+    // Only set default values if no saved data exists
+    if (!savedData) {
+      setValue('invoiceDate', currentDate);
+      setValue('invoiceNumber', generateInvoiceNumber(currentDate));
+    }
+  }, [setValue, savedData]);
+
+  // Save form data to localStorage whenever form values change
+  const formValues = watch();
+  useEffect(() => {
+    if (isClient && formValues) {
+      // Debounce the save operation to avoid excessive localStorage writes
+      const timeoutId = setTimeout(() => {
+        try {
+          localStorage.setItem('invoiceFormData', JSON.stringify(formValues));
+        } catch (error) {
+          console.error('Error saving form data to localStorage:', error);
+        }
+      }, 500); // Save after 500ms of inactivity
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [formValues, isClient]);
 
   // Auto-calculate due date and regenerate invoice number when date changes
   const invoiceDate = watch('invoiceDate');
@@ -116,6 +153,39 @@ export function InvoiceForm() {
     };
 
     generatePDF(invoiceData);
+    
+    // Clear saved data after successful PDF generation
+    try {
+      localStorage.removeItem('invoiceFormData');
+    } catch (error) {
+      console.error('Error clearing saved form data:', error);
+    }
+  };
+
+  const clearForm = () => {
+    // Clear localStorage
+    try {
+      localStorage.removeItem('invoiceFormData');
+    } catch (error) {
+      console.error('Error clearing saved form data:', error);
+    }
+    
+    // Reset form to default values
+    const currentDate = new Date().toISOString().split('T')[0];
+    setValue('invoiceNumber', generateInvoiceNumber(currentDate));
+    setValue('invoiceDate', currentDate);
+    setValue('senderCompany', '');
+    setValue('senderAddress', '');
+    setValue('recipientCompany', '');
+    setValue('recipientAddress', '');
+    setValue('items', [{ description: '', quantity: 1, price: 0 }]);
+    setValue('notes', '');
+    setValue('accountName', '');
+    setValue('accountNumber', '');
+    setValue('bankName', '');
+    setValue('currency', 'IDR');
+    setValue('taxType', 'percentage');
+    setValue('taxRate', 0);
   };
 
 
@@ -143,25 +213,9 @@ export function InvoiceForm() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 flex gap-6">
+    <div className="max-w-7xl mx-auto p-6 flex gap-2">
       {/* Main Form Content */}
       <div className="flex-1 space-y-2">
-      {/* Header */}
-      <div className="invoice-header text-white p-8 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Sparkles className="h-8 w-8" />
-              PT Aghatis Karya Indonesia
-            </h1>
-            <p className="text-green-100 mt-2">Professional Invoice Generator</p>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold">INVOICE</div>
-            <div className="text-green-100">{watch('invoiceNumber')}</div>
-          </div>
-        </div>
-      </div>
 
       <form id="invoice-form" onSubmit={handleSubmit(onSubmit)} className="space-y-2">
 
@@ -297,27 +351,43 @@ export function InvoiceForm() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-[-15px]">
               {fields.map((field, index) => (
                 <div key={field.id} className="grid grid-cols-12 gap-2 items-end">
                   <div className={fields.length > 1 ? "col-span-7" : "col-span-8"}>
-                    <Label htmlFor={`items.${index}.description`}>Description</Label>
+                    {index === 0 && <Label htmlFor={`items.${index}.description`}>Description</Label>}
                     <Input
                       {...register(`items.${index}.description`)}
                       placeholder="Task description"
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label htmlFor={`items.${index}.quantity`}>Qty</Label>
+                    {index === 0 && <Label htmlFor={`items.${index}.quantity`}>Qty</Label>}
                     <Input
                       type="number"
                       {...register(`items.${index}.quantity`, { valueAsNumber: true })}
                       min="1"
                       className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                      onKeyDown={(e) => {
+                        // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
+                        if ([8, 9, 27, 13, 46, 35, 36, 37, 39, 38, 40].indexOf(e.keyCode) !== -1 ||
+                            // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+                            (e.keyCode === 65 && e.ctrlKey === true) ||
+                            (e.keyCode === 67 && e.ctrlKey === true) ||
+                            (e.keyCode === 86 && e.ctrlKey === true) ||
+                            (e.keyCode === 88 && e.ctrlKey === true) ||
+                            (e.keyCode === 90 && e.ctrlKey === true)) {
+                          return;
+                        }
+                        // Ensure that it is a number and stop the keypress
+                        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                          e.preventDefault();
+                        }
+                      }}
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label htmlFor={`items.${index}.price`}>Price</Label>
+                    {index === 0 && <Label htmlFor={`items.${index}.price`}>Price</Label>}
                     <Input
                       type="number"
                       step={watch('currency') === 'IDR' ? "1000" : "0.01"}
@@ -325,6 +395,7 @@ export function InvoiceForm() {
                       min="0"
                       className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                       onKeyDown={(e) => {
+                        // Handle Shift+Arrow shortcuts first
                         if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                           e.preventDefault();
                           const currentValue = watch(`items.${index}.price`) || 0;
@@ -333,6 +404,23 @@ export function InvoiceForm() {
                             ? currentValue + increment 
                             : Math.max(0, currentValue - increment);
                           setValue(`items.${index}.price`, newValue);
+                          return;
+                        }
+                        // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
+                        if ([8, 9, 27, 13, 46, 35, 36, 37, 39, 38, 40].indexOf(e.keyCode) !== -1 ||
+                            // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+                            (e.keyCode === 65 && e.ctrlKey === true) ||
+                            (e.keyCode === 67 && e.ctrlKey === true) ||
+                            (e.keyCode === 86 && e.ctrlKey === true) ||
+                            (e.keyCode === 88 && e.ctrlKey === true) ||
+                            (e.keyCode === 90 && e.ctrlKey === true) ||
+                            // Allow decimal point for non-IDR currencies
+                            (e.keyCode === 190 && watch('currency') !== 'IDR')) {
+                          return;
+                        }
+                        // Ensure that it is a number and stop the keypress
+                        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                          e.preventDefault();
                         }
                       }}
                     />
@@ -391,6 +479,7 @@ export function InvoiceForm() {
                         max={watchedTaxType === 'percentage' ? "100" : undefined}
                         placeholder={watchedTaxType === 'percentage' ? '0.00' : '0'}
                         onKeyDown={(e) => {
+                          // Handle Shift+Arrow shortcuts first
                           if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                             e.preventDefault();
                             const currentValue = watch('taxRate') || 0;
@@ -401,6 +490,23 @@ export function InvoiceForm() {
                             const maxValue = watchedTaxType === 'percentage' ? 100 : undefined;
                             const finalValue = maxValue !== undefined ? Math.min(newValue, maxValue) : newValue;
                             setValue('taxRate', finalValue);
+                            return;
+                          }
+                          // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
+                          if ([8, 9, 27, 13, 46, 35, 36, 37, 39, 38, 40].indexOf(e.keyCode) !== -1 ||
+                              // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+                              (e.keyCode === 65 && e.ctrlKey === true) ||
+                              (e.keyCode === 67 && e.ctrlKey === true) ||
+                              (e.keyCode === 86 && e.ctrlKey === true) ||
+                              (e.keyCode === 88 && e.ctrlKey === true) ||
+                              (e.keyCode === 90 && e.ctrlKey === true) ||
+                              // Allow decimal point for percentage mode
+                              (e.keyCode === 190 && watchedTaxType === 'percentage')) {
+                            return;
+                          }
+                          // Ensure that it is a number and stop the keypress
+                          if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                            e.preventDefault();
                           }
                         }}
                       />
@@ -426,14 +532,20 @@ export function InvoiceForm() {
                 <span className="font-mono">{formatCurrency(taxAmount, watch('currency'))}</span>
               </div>
               <div className="flex justify-between text-lg font-bold border-t pt-2">
-                <span>Grand Total:</span>
+                <span>Total:</span>
                 <span className="font-mono">{formatCurrency(grandTotal, watch('currency'))}</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* 5. Additional Information (Full Width) */}
+
+      </form>
+      </div>
+
+      {/* Right Sidebar */}
+      <div className="w-80 space-y-2">
+        {/* Additional Information */}
         <Card>
           <CardHeader>
             <CardTitle>Additional Information</CardTitle>
@@ -448,7 +560,7 @@ export function InvoiceForm() {
                 rows={3}
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-3">
               <div>
                 <Label htmlFor="accountName">Account Name</Label>
                 <Input
@@ -464,8 +576,25 @@ export function InvoiceForm() {
                 <Label htmlFor="accountNumber">Account Number</Label>
                 <Input
                   id="accountNumber"
+                  type="number"
                   {...register('accountNumber')}
                   placeholder="Account number"
+                  onKeyDown={(e) => {
+                    // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
+                    if ([8, 9, 27, 13, 46, 35, 36, 37, 39, 38, 40].indexOf(e.keyCode) !== -1 ||
+                        // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z
+                        (e.keyCode === 65 && e.ctrlKey === true) ||
+                        (e.keyCode === 67 && e.ctrlKey === true) ||
+                        (e.keyCode === 86 && e.ctrlKey === true) ||
+                        (e.keyCode === 88 && e.ctrlKey === true) ||
+                        (e.keyCode === 90 && e.ctrlKey === true)) {
+                      return;
+                    }
+                    // Ensure that it is a number and stop the keypress
+                    if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                      e.preventDefault();
+                    }
+                  }}
                 />
                 {errors.accountNumber && (
                   <p className="text-sm text-red-500 mt-1">{errors.accountNumber.message}</p>
@@ -485,11 +614,7 @@ export function InvoiceForm() {
             </div>
           </CardContent>
         </Card>
-      </form>
-      </div>
 
-      {/* Right Sidebar */}
-      <div className="w-80 space-y-2">
         {/* Currency Selection */}
         <Card>
           <CardHeader>
@@ -518,12 +643,22 @@ export function InvoiceForm() {
           </CardContent>
         </Card>
 
-        {/* Generate PDF Button */}
+        {/* Action Buttons */}
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-3">
             <Button type="submit" size="lg" className="w-full sparkle" form="invoice-form">
               <Download className="h-5 w-5 mr-2" />
               Generate PDF
+            </Button>
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="lg" 
+              className="w-full" 
+              onClick={clearForm}
+            >
+              <Trash2 className="h-5 w-5 mr-2" />
+              Clear Form
             </Button>
           </CardContent>
         </Card>
