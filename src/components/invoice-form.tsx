@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Trash2, Download, Send, Sparkles, ArrowLeftRight } from 'lucide-react';
+import { format } from 'date-fns';
+import { Plus, Trash2, Download, Send, Sparkles, ArrowLeftRight, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { InvoiceData } from '@/types/invoice';
 import { generateInvoiceNumber, formatCurrency, formatDate, addDays, getCurrencySymbol } from '@/lib/utils';
 import { generatePDF } from '@/lib/pdf-generator';
+import { saveInvoiceToHistory, updateInvoiceStatus } from '@/lib/invoice-history';
+import { InvoiceHistory } from './invoice-history';
 
 const invoiceSchema = z.object({
   invoiceNumber: z.string().min(1, 'Invoice number is required'),
@@ -39,6 +42,8 @@ type InvoiceFormData = z.infer<typeof invoiceSchema>;
 
 export function InvoiceForm() {
   const [isClient, setIsClient] = useState(false);
+  const [currentView, setCurrentView] = useState<'form' | 'history'>('form');
+  const [isLoadingInvoice, setIsLoadingInvoice] = useState(false);
 
   // Load saved data from localStorage
   const loadSavedData = () => {
@@ -137,7 +142,7 @@ export function InvoiceForm() {
     }
   }, [invoiceDate, isClient]);
 
-  const onSubmit = (data: InvoiceFormData) => {
+  const onSubmit = async (data: InvoiceFormData) => {
     const invoiceData: InvoiceData = {
       ...data,
       invoiceDate: new Date(data.invoiceDate),
@@ -152,13 +157,23 @@ export function InvoiceForm() {
       grandTotal,
     };
 
-    generatePDF(invoiceData);
-    
-    // Clear saved data after successful PDF generation
     try {
+      // Save to history first
+      const historyId = saveInvoiceToHistory(invoiceData);
+      
+      // Generate PDF
+      await generatePDF(invoiceData);
+      
+      // Update status to sent after successful PDF generation
+      updateInvoiceStatus(historyId, 'sent');
+      
+      // Clear saved data after successful PDF generation
       localStorage.removeItem('invoiceFormData');
+      
+      // Show success message or redirect to history
+      console.log('Invoice saved and PDF generated successfully');
     } catch (error) {
-      console.error('Error clearing saved form data:', error);
+      console.error('Error processing invoice:', error);
     }
   };
 
@@ -188,6 +203,43 @@ export function InvoiceForm() {
     setValue('taxRate', 0);
   };
 
+  const handleLoadInvoice = (invoiceData: InvoiceData) => {
+    setIsLoadingInvoice(true);
+    try {
+      // Convert the invoice data to form format
+      const formData = {
+         ...invoiceData,
+         invoiceDate: format(invoiceData.invoiceDate, 'yyyy-MM-dd'),
+         items: invoiceData.items.map(item => ({
+           description: item.description,
+           quantity: item.quantity,
+           price: item.price
+         }))
+       };
+       
+       // Reset form with the loaded data
+       Object.keys(formData).forEach(key => {
+         setValue(key as keyof InvoiceFormData, formData[key as keyof InvoiceFormData] as any);
+       });
+      
+      // Switch to form view
+      setCurrentView('form');
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+    } finally {
+      setIsLoadingInvoice(false);
+    }
+  };
+
+  const handleCreateNew = () => {
+    clearForm();
+    setCurrentView('form');
+  };
+
+  const handleViewHistory = () => {
+    setCurrentView('history');
+  };
+
 
 
   const sendInvoice = () => {
@@ -198,6 +250,16 @@ export function InvoiceForm() {
     window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
+  // Conditional rendering based on current view
+  if (currentView === 'history') {
+    return (
+      <InvoiceHistory 
+        onCreateNew={handleCreateNew}
+        onLoadInvoice={handleLoadInvoice}
+      />
+    );
+  }
+
   // Prevent hydration mismatch by not rendering until client-side
   if (!isClient) {
     return (
@@ -205,7 +267,7 @@ export function InvoiceForm() {
         {/* Main Form Content */}
         <div className="flex-1 space-y-2">
           <div className="flex items-center justify-center h-64">
-            <div className="text-lg">Loading...</div>
+            <div className="text-lg">SABAR YA NGENTOT...</div>
           </div>
         </div>
       </div>
@@ -213,7 +275,7 @@ export function InvoiceForm() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 flex gap-2">
+    <div className="max-w-7xl mx-auto p-6 flex flex-col lg:flex-row gap-2">
       {/* Main Form Content */}
       <div className="flex-1 space-y-2">
 
@@ -225,8 +287,8 @@ export function InvoiceForm() {
           <CardHeader>
             <CardTitle>Invoice Information</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <CardContent className="space-y-4 p-4 lg:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="invoiceNumber">Invoice Number</Label>
                 <Input
@@ -249,12 +311,6 @@ export function InvoiceForm() {
                   <p className="text-sm text-red-500 mt-1">{errors.invoiceDate.message}</p>
                 )}
               </div>
-              <div>
-                <Label>Due Date</Label>
-                <div className="p-2 bg-muted rounded-md text-sm">
-                  {watch('invoiceDate') ? formatDate(addDays(new Date(watch('invoiceDate')), 3)) : 'Select invoice date'}
-                </div>
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -266,7 +322,7 @@ export function InvoiceForm() {
             <CardHeader>
               <CardTitle>From (Sender)</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 lg:p-6">
               <div>
                 <Label htmlFor="senderCompany">Company Name</Label>
                 <Input
@@ -298,7 +354,7 @@ export function InvoiceForm() {
             <CardHeader>
               <CardTitle>To (Recipient)</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 lg:p-6">
               <div>
                 <Label htmlFor="recipientCompany">Company Name</Label>
                 <Input
@@ -350,7 +406,7 @@ export function InvoiceForm() {
               </Button>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 lg:p-6">
             <div className="space-y-[-15px]">
               {fields.map((field, index) => (
                 <div key={field.id} className="grid grid-cols-12 gap-2 items-end">
@@ -393,6 +449,7 @@ export function InvoiceForm() {
                       step={watch('currency') === 'IDR' ? "1000" : "0.01"}
                       {...register(`items.${index}.price`, { valueAsNumber: true })}
                       min="0"
+                      placeholder="0"
                       className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                       onKeyDown={(e) => {
                         // Handle Shift+Arrow shortcuts first
@@ -449,7 +506,7 @@ export function InvoiceForm() {
           <CardHeader>
             <CardTitle>Summary</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 lg:p-6">
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>Subtotal:</span>
@@ -543,14 +600,14 @@ export function InvoiceForm() {
       </form>
       </div>
 
-      {/* Right Sidebar */}
-      <div className="w-80 space-y-2">
+      {/* Right Sidebar - Responsive: side on desktop, bottom on mobile */}
+      <div className="w-full lg:w-80 space-y-2 order-last lg:order-none">
         {/* Additional Information */}
         <Card>
           <CardHeader>
             <CardTitle>Additional Information</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 lg:p-6">
             <div>
               <Label htmlFor="notes">Notes</Label>
               <Textarea
@@ -620,7 +677,7 @@ export function InvoiceForm() {
           <CardHeader>
             <CardTitle>Settings</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 lg:p-6">
             <div>
               <Label htmlFor="currency">Currency</Label>
               <select
@@ -645,21 +702,31 @@ export function InvoiceForm() {
 
         {/* Action Buttons */}
         <Card>
-          <CardContent className="pt-6 space-y-3">
-            <Button type="submit" size="lg" className="w-full sparkle" form="invoice-form">
-              <Download className="h-5 w-5 mr-2" />
-              Generate PDF
-            </Button>
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="lg" 
-              className="w-full" 
-              onClick={clearForm}
-            >
-              <Trash2 className="h-5 w-5 mr-2" />
-              Clear Form
-            </Button>
+          <CardContent className="pt-6 p-4 lg:p-6">
+            <div className="flex gap-2">
+              <Button type="submit" size="lg" className="flex-1 sparkle" form="invoice-form">
+                 <Download className="h-5 w-3 mr-2" />
+                 Generate PDF
+               </Button>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="icon" 
+                className="flex-1 aspect-square h-[44px] w-[44px]" 
+                onClick={handleViewHistory}
+              >
+                <History className="h-5 w-5" />
+              </Button>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="icon" 
+                className="flex-1 aspect-square h-[44px] w-[44px]" 
+                onClick={clearForm}
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
