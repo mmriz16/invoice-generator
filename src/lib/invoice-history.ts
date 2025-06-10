@@ -17,12 +17,12 @@ export function saveInvoiceToHistory(invoiceData: InvoiceData): string {
     createdAt: new Date(),
     updatedAt: new Date(),
     pdfGenerated: false,
-    fullData: invoiceData
+    fullData: invoiceData,
   };
 
   const history = getInvoiceHistory();
   history.unshift(historyItem); // Add to beginning of array
-  
+
   try {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
     return historyItem.id;
@@ -36,7 +36,7 @@ export function getInvoiceHistory(): InvoiceHistoryItem[] {
   try {
     const historyData = localStorage.getItem(HISTORY_STORAGE_KEY);
     if (!historyData) return [];
-    
+
     const history = JSON.parse(historyData);
     // Convert date strings back to Date objects
     return history.map((item: any) => ({
@@ -48,8 +48,8 @@ export function getInvoiceHistory(): InvoiceHistoryItem[] {
       fullData: {
         ...item.fullData,
         invoiceDate: new Date(item.fullData.invoiceDate),
-        dueDate: new Date(item.fullData.dueDate)
-      }
+        dueDate: new Date(item.fullData.dueDate),
+      },
     }));
   } catch (error) {
     console.error('Error loading invoice history:', error);
@@ -59,21 +59,21 @@ export function getInvoiceHistory(): InvoiceHistoryItem[] {
 
 export function getInvoiceById(id: string): InvoiceHistoryItem | null {
   const history = getInvoiceHistory();
-  return history.find(item => item.id === id) || null;
+  return history.find((item) => item.id === id) || null;
 }
 
 export function updateInvoiceStatus(id: string, status: InvoiceHistoryItem['status']): void {
   const history = getInvoiceHistory();
-  const index = history.findIndex(item => item.id === id);
-  
+  const index = history.findIndex((item) => item.id === id);
+
   if (index !== -1) {
     history[index].status = status;
     history[index].updatedAt = new Date();
-    
+
     if (status === 'sent') {
       history[index].pdfGenerated = true;
     }
-    
+
     try {
       localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
     } catch (error) {
@@ -85,8 +85,8 @@ export function updateInvoiceStatus(id: string, status: InvoiceHistoryItem['stat
 
 export function deleteInvoiceFromHistory(id: string): void {
   const history = getInvoiceHistory();
-  const filteredHistory = history.filter(item => item.id !== id);
-  
+  const filteredHistory = history.filter((item) => item.id !== id);
+
   try {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(filteredHistory));
   } catch (error) {
@@ -97,13 +97,13 @@ export function deleteInvoiceFromHistory(id: string): void {
 
 export function filterInvoiceHistory(filters: InvoiceHistoryFilters): InvoiceHistoryItem[] {
   const history = getInvoiceHistory();
-  
-  return history.filter(item => {
+
+  return history.filter((item) => {
     // Status filter
     if (filters.status && filters.status !== 'all' && item.status !== filters.status) {
       return false;
     }
-    
+
     // Date range filter
     if (filters.dateFrom && item.invoiceDate < filters.dateFrom) {
       return false;
@@ -111,7 +111,7 @@ export function filterInvoiceHistory(filters: InvoiceHistoryFilters): InvoiceHis
     if (filters.dateTo && item.invoiceDate > filters.dateTo) {
       return false;
     }
-    
+
     // Search term filter
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase();
@@ -121,36 +121,36 @@ export function filterInvoiceHistory(filters: InvoiceHistoryFilters): InvoiceHis
         item.recipientCompany.toLowerCase().includes(searchLower)
       );
     }
-    
+
     return true;
   });
 }
 
 export function getInvoiceHistoryStats(): InvoiceHistoryStats {
   const history = getInvoiceHistory();
-  
+
   const stats: InvoiceHistoryStats = {
     total: history.length,
     draft: 0,
     sent: 0,
     paid: 0,
     overdue: 0,
-    totalAmount: 0
+    totalAmount: 0,
   };
-  
+
   const now = new Date();
-  
-  history.forEach(item => {
+
+  history.forEach((item) => {
     stats[item.status]++;
     stats.totalAmount += item.grandTotal;
-    
+
     // Check for overdue invoices
     if (item.status === 'sent' && item.dueDate < now) {
       stats.overdue++;
       stats.sent--;
     }
   });
-  
+
   return stats;
 }
 
