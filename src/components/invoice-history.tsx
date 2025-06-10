@@ -3,23 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
-  Calendar,
   Search,
-  Filter,
   Download,
   Eye,
   Trash2,
   Plus,
   FileText,
-  DollarSign,
   Clock,
   CheckCircle,
   AlertCircle,
-  MoreHorizontal
+  MoreHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -40,7 +36,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { InvoiceHistoryItem, InvoiceHistoryFilters } from '@/types/invoice-history';
@@ -50,7 +45,6 @@ import {
   getInvoiceHistoryStats,
   deleteInvoiceFromHistory,
   updateInvoiceStatus,
-  getInvoiceById
 } from '@/lib/invoice-history';
 import { formatCurrency } from '@/lib/utils';
 import { generatePDF } from '@/lib/pdf-generator';
@@ -61,13 +55,12 @@ interface InvoiceHistoryProps {
 }
 
 export function InvoiceHistory({ onCreateNew, onLoadInvoice }: InvoiceHistoryProps) {
-  const [invoices, setInvoices] = useState<InvoiceHistoryItem[]>([]);
-  const [filteredInvoices, setFilteredInvoices] = useState<InvoiceHistoryItem[]>([]);
-  const [filters, setFilters] = useState<InvoiceHistoryFilters>({ status: 'all' });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceHistoryItem | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
+  const [ invoices, setInvoices ] = useState<InvoiceHistoryItem[]>([]);
+  const [ filteredInvoices, setFilteredInvoices ] = useState<InvoiceHistoryItem[]>([]);
+  const [ filters, setFilters ] = useState<InvoiceHistoryFilters>({ status: 'all' });
+  const [ searchTerm, setSearchTerm ] = useState('');
+  const [ isDeleteDialogOpen, setIsDeleteDialogOpen ] = useState(false);
+  const [ invoiceToDelete, setInvoiceToDelete ] = useState<string | null>(null);
 
   useEffect(() => {
     loadInvoices();
@@ -76,10 +69,10 @@ export function InvoiceHistory({ onCreateNew, onLoadInvoice }: InvoiceHistoryPro
   useEffect(() => {
     const filtered = filterInvoiceHistory({
       ...filters,
-      searchTerm: searchTerm || undefined
+      searchTerm: searchTerm || undefined,
     });
     setFilteredInvoices(filtered);
-  }, [invoices, filters, searchTerm]);
+  }, [ invoices, filters, searchTerm ]);
 
   const loadInvoices = () => {
     const history = getInvoiceHistory();
@@ -271,9 +264,9 @@ export function InvoiceHistory({ onCreateNew, onLoadInvoice }: InvoiceHistoryPro
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No invoices found</h3>
               <p className="text-muted-foreground mb-4">
-                {invoices.length === 0
-                  ? "You haven't created any invoices yet."
-                  : "No invoices match your current filters."}
+                {invoices.length === 0 ?
+                  'You haven\'t created any invoices yet.' :
+                  'No invoices match your current filters.'}
               </p>
               {invoices.length === 0 && (
                 <Button onClick={onCreateNew}>

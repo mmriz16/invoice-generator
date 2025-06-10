@@ -137,7 +137,7 @@ function createInvoiceHTML(data: InvoiceData): HTMLElement {
             </tr>
           </thead>
           <tbody>
-            ${data.items.map(item => `
+            ${data.items.map((item) => `
               <tr style="font-size: 12px; margin: 0;">
                 <td style="padding-bottom: 22px; padding-top: 10px; border-bottom: 1px solid #e2e8f0;">${item.description}</td>
                 <td style="padding-bottom: 22px; padding-top: 10px; text-align: center; border-bottom: 1px solid #e2e8f0;">${item.quantity}</td>
@@ -220,7 +220,7 @@ export function printInvoice(invoiceData: InvoiceData) {
   if (!printWindow) return;
 
   const invoiceHTML = createInvoiceHTML(invoiceData);
-  
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
@@ -239,7 +239,7 @@ export function printInvoice(invoiceData: InvoiceData) {
     </body>
     </html>
   `);
-  
+
   printWindow.document.close();
   printWindow.focus();
   printWindow.print();
