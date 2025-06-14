@@ -268,7 +268,7 @@ export function InvoiceForm() {
         {/* Main Form Content */}
         <div className="flex-1 space-y-2">
           <div className="flex items-center justify-center h-64">
-            <div className="text-lg">SABAR YA NGENTOT...</div>
+            <div className="text-lg">Tunggu Sebentar...</div>
           </div>
         </div>
       </div>
